@@ -3,6 +3,7 @@
 Plugin Name: Minit
 Plugin URI: https://github.com/kasparsd/minit
 GitHub URI: https://github.com/kasparsd/minit
+Update URI: https://updates.wpelevator.com/wp-json/update-pilot/v1/plugins
 Description: Combine JS and CSS files and serve them from the uploads folder.
 Version: 1.6.0
 Author: Kaspars Dambis
