@@ -4,8 +4,16 @@ abstract class Minit_Assets {
 
 	public $queue = array();
 	public $done = array();
+
+	/**
+	 * Instance of either WP scripts or styles.
+	 *
+	 * @var WP_Dependencies
+	 */
 	public $handler;
+
 	public $extension;
+
 	public $revision;
 
 	public function __construct( $handler, $extension = null, $revision = null ) {
@@ -19,12 +27,9 @@ abstract class Minit_Assets {
 		$this->revision = $revision;
 	}
 
-
 	abstract public function file_cache();
 
-
 	abstract public function init();
-
 
 	/**
 	 * Register queued assets for Minit processing.
@@ -38,8 +43,58 @@ abstract class Minit_Assets {
 			return $todo;
 		}
 
-		// Queue all of them for Minit
-		$this->queue = array_merge( $this->queue, $todo );
+		// Allow others to exclude handles from Minit.
+		$excluded = $this->get_excluded( $todo );
+
+		// Queue all of them for Minit.
+		$this->queue = array_merge( $this->queue, array_diff( $todo, $excluded ) );
+
+		// Return excluded handles back to the queue.
+		return $excluded;
+	}
+
+	/**
+	 * Get all dependencies of specified handles.
+	 *
+	 * @param string[] $handles All dependency handles.
+	 *
+	 * @return string[] List of dependency handles.
+	 */
+	protected function get_deps( array $handles ): array {
+		$deps = array();
+
+		foreach ( $handles as $handle ) {
+			if ( isset( $this->handler->registered[ $handle ] ) ) {
+				$deps = array_merge(
+					$deps,
+					$this->handler->registered[ $handle ]->deps
+				);
+			}
+		}
+
+		return array_unique( $deps );
+	}
+
+	/**
+	 * Get the excluded handles and their dependencies.
+	 *
+	 * @param string[] $handles All handles to check.
+	 *
+	 * @return string[]
+	 */
+	protected function get_excluded( array $handles ): array {
+		// Allow others to exclude handles from Minit.
+		$excluded_handles = (array) apply_filters(
+			'minit-exclude-' . $this->extension,
+			array()
+		);
+
+		$excluded = array_intersect( $handles, $excluded_handles );
+
+		if ( ! empty( $excluded ) ) {
+			// Merge with dependencies of excluded handles.
+			return array_merge( $excluded, $this->get_deps( $excluded ) );
+		}
 
 		return array();
 	}
@@ -54,7 +109,7 @@ abstract class Minit_Assets {
 	 *
 	 * @return string
 	 */
-	public function cache_key( $handles = array() ) {
+	protected function cache_key( $handles = array() ) {
 		// Build a cache key.
 		$ver = array(
 			'revision-' . $this->revision,
@@ -69,7 +124,6 @@ abstract class Minit_Assets {
 
 		return md5( 'minit-' . implode( '-', $ver ) );
 	}
-
 
 	/**
 	 * The brains of Minit. Loops through all queued scripts and combines them into a single blob.
@@ -95,17 +149,7 @@ abstract class Minit_Assets {
 			return $cache['url'];
 		}
 
-		// Allow others to exclude handles from Minit.
-		$exclude = (array) apply_filters(
-			'minit-exclude-' . $this->extension,
-			array()
-		);
-
 		foreach ( $this->queue as $handle ) {
-			if ( in_array( $handle, $exclude, true ) ) {
-				continue;
-			}
-
 			// Get the relative URL of the asset.
 			$src = $this->get_asset_relative_path( $handle );
 
